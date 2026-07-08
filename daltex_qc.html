@@ -498,7 +498,7 @@ input,select,button{font-family:var(--font)}
   <div class="tab" data-tab="variety"><i class="ti ti-plant-2"></i>Variety</div>
   <div class="tab" data-tab="color"><i class="ti ti-palette"></i>Color</div>
   <div class="tab" data-tab="client"><i class="ti ti-users"></i>Clients</div>
-  <div class="tab" data-tab="sub_client" style="display:none"><i class="ti ti-user-circle"></i>Sub Clients</div>
+  <div class="tab" data-tab="sub_client"><i class="ti ti-user-circle"></i>Sub Clients</div>
   <div class="tab" data-tab="packhouse"><i class="ti ti-home-cog"></i>Packhouse</div>
   <div class="tab" data-tab="data"><i class="ti ti-database"></i>Data Extraction</div>
 </div>
@@ -1523,7 +1523,8 @@ let LDF='',LDT='';
     ff.min=LDF;ff.max=LDT;ff.value=LDF;ft.min=LDF;ft.max=LDT;ft.value=LDT;
     buildMS();
     const reps=new Set(ROWS.map(r=>r.report_id)).size;
-    const fmtLD=LDT?new Date(LDT+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—';
+    const maxCreated=ROWS.map(r=>r.created_date).filter(Boolean).sort().pop()||'';
+    const fmtLD=maxCreated?new Date(maxCreated+'T00:00:00').toLocaleDateString('en-GB',{day:'numeric',month:'short',year:'numeric'}):'—';
     document.querySelectorAll('.tbadge-live').forEach(b=>{b.innerHTML='<div class="live-dot"></div> Live &middot; '+reps+' inspections &middot; '+fmtLD;});
     apply();
   }catch(e){
