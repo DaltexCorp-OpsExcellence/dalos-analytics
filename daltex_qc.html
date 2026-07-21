@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.__DALOS_ACCESS_CHECK={fn:'has_dashboard_access',args:{p_product:'grapes',p_dashboard:'qc'}};</script>
 <script src="gate.js"></script>
 
 <meta charset="UTF-8">
@@ -477,7 +478,7 @@ input,select,button{font-family:var(--font)}
 <button class="mob-ftog" id="mob-ftog" onclick="document.getElementById('fbar').classList.toggle('open')"><i class="ti ti-adjustments-horizontal"></i> Filters <span class="cnt" id="mob-fcnt" style="display:none"></span><i class="ti ti-chevron-down" style="margin-left:auto"></i></button>
 <div class="fbar" id="fbar">
   <div class="fgrp"><div class="flab">Season</div><div class="ms" data-f="season"></div></div>
-  <div class="fgrp"><div class="flab">Date basis</div><select class="fdate" id="f-basis" onchange="setDateBasis(this.value)" style="cursor:pointer"><option value="load_date">Load date</option><option value="arrival_date" disabled>Arrival date (pending shipments link)</option><option value="pack_date">Pack date</option><option value="created_date">Created date</option></select></div>
+  <div class="fgrp"><div class="flab">Date basis</div><select class="fdate" id="f-basis" onchange="setDateBasis(this.value)" style="cursor:pointer"><option value="created_date" selected>Created date</option><option value="load_date">Load date</option><option value="arrival_date" disabled>Arrival date (pending shipments link)</option><option value="pack_date">Pack date</option></select></div>
   <div class="fgrp"><div class="flab">From</div><input type="date" class="fdate" id="f-from" onchange="setDate()"></div>
   <div class="fgrp"><div class="flab">To</div><input type="date" class="fdate" id="f-to" onchange="setDate()"></div>
   <div class="fgrp"><div class="flab">Week</div><div class="ms" data-f="wk"></div></div>
@@ -498,7 +499,7 @@ input,select,button{font-family:var(--font)}
 
 </div></div></div>
 
-<script>/* v1781459244 */
+<script>/* v1784550792 */
 
 /* ===== DalOS Analytics — QC Grapes ===== */
 const SB='https://sfyjvgjwvtwkrnqrvqyc.supabase.co';
@@ -512,10 +513,10 @@ const MAJC='#dc2626', MINC='#d97706';
 const DIMS={farm:['sample_farm','Farm'],country:['country','Country'],variety:['variety','Variety'],color:['color','Color'],client:['client','Client'],sub_client:['sub_client','Sub Client'],packhouse:['packhouse','Packhouse']};
 const MSF=['season','wk','sample_farm','country','variety','color','client','sub_client','packhouse','container_number','sample_score'];
 
-let ROWS=[],S={tab:'ov',gran:'weekly',from:'',to:'',dateBasis:'load_date'},charts={},dataPage=0;
+let ROWS=[],S={tab:'ov',gran:'weekly',from:'',to:'',dateBasis:'created_date'},charts={},dataPage=0;
 // Active date column resolver. Falls back to created_date when the chosen basis is empty for a row.
 const DATE_BASES={load_date:'Load date',pack_date:'Pack date',created_date:'Created date',arrival_date:'Arrival date'};
-function dcol(r){return (r[S.dateBasis]||r.created_date||'');}
+function dcol(r){var v=r[S.dateBasis]||'';return v?String(v).slice(0,10):'';}
 MSF.forEach(f=>S[f]=[]);
 const num=v=>{const n=parseFloat(v);return isNaN(n)?0:n;};
 const r2=v=>Math.round(v*100)/100;
@@ -543,12 +544,26 @@ function isoWk(ds){const t=new Date(ds+'T00:00:00');t.setDate(t.getDate()+3-((t.
 function perKey(r){return S.gran==='daily'?dcol(r):S.gran==='weekly'?'W'+String(r.wk).padStart(2,'0'):S.gran==='monthly'?dcol(r).slice(0,7):r.season;}
 
 async function fetchAll(){
-  let out=[],from=0,page=1000;
-  for(;;){
-    const res=await fetch(SB+'/rest/v1/cqc_samples_export?select=*&order=created_date.asc&offset='+from+'&limit='+page,{headers:{apikey:AK,Authorization:'Bearer '+AK}});
-    if(!res.ok) throw new Error('HTTP '+res.status);
-    const js=await res.json(); out=out.concat(js);
-    if(js.length<page) break; from+=page;
+  // Single request with explicit large Range - avoids offset-pagination
+  // skips/duplicates entirely. Falls back to paged loading if capped.
+  const res=await fetch(SB+'/rest/v1/cqc_samples_export?select=*',{
+    headers:{apikey:AK,Authorization:'Bearer '+AK,'Range':'0-99999','Range-Unit':'items','Prefer':'count=exact'}
+  });
+  if(!res.ok && res.status!==206) throw new Error('HTTP '+res.status);
+  let out=await res.json();
+  // Verify against true total from Content-Range (e.g. "0-4031/4032")
+  const cr=res.headers.get('content-range');
+  const total=cr?parseInt(cr.split('/')[1],10):null;
+  // If server capped the response, page the remainder by Range (stable because
+  // we request non-overlapping ranges against count=exact totals)
+  while(total && out.length<total){
+    const r2=await fetch(SB+'/rest/v1/cqc_samples_export?select=*',{
+      headers:{apikey:AK,Authorization:'Bearer '+AK,'Range':out.length+'-'+(out.length+999),'Range-Unit':'items'}
+    });
+    if(!r2.ok && r2.status!==206) break;
+    const js=await r2.json();
+    if(!js.length) break;
+    out=out.concat(js);
   }
   return out;
 }
@@ -559,7 +574,7 @@ async function fetchArrivalMap(){
   const SID='19482d39-6074-4c60-b772-ced5df1ffdcb';
   const map={};
   try{
-    const res=await fetch(SB+'/rest/v1/grapes_shipments_view?season_id=eq.'+SID+'&select=container_number,eta',{headers:{apikey:AK}});
+    const res=await fetch(SB+'/rest/v1/grapes_shipments_view?season_id=eq.'+SID+'&product_id=eq.grapes&select=container_number,eta',{headers:{apikey:AK}});
     if(!res.ok) return map;
     const js=await res.json();
     js.forEach(r=>{const c=norm(r.container_number);const e=r.eta;if(c&&e&&!map[c])map[c]=String(e).slice(0,10);});
@@ -570,8 +585,10 @@ async function fetchArrivalMap(){
 function F(){
   return ROWS.filter(r=>{
     for(const f of MSF){if(S[f].length&&!S[f].includes(f==='wk'?String(r.wk):norm(r[f])))return false;}
-    if(S.from&&dcol(r)<S.from)return false;
-    if(S.to&&dcol(r)>S.to)return false;
+    const d=dcol(r);
+    if(!d)return false; // exclude rows missing the selected date basis
+    if(S.from&&d<S.from)return false;
+    if(S.to&&d>S.to)return false;
     return true;
   });
 }
@@ -670,9 +687,11 @@ function setDateBasis(v){
   S.dateBasis=v;
   recalcDates();
   S.from=LDF;S.to=LDT;
+  S.wk=[];
   const ff=document.getElementById('f-from'),ft=document.getElementById('f-to');
-  if(ff){ff.min=LDF;ff.max=LDT;ff.value=LDF;}
-  if(ft){ft.min=LDF;ft.max=LDT;ft.value=LDT;}
+  if(ff){ff.min=LDF;ff.value=LDF;}
+  if(ft){ft.value=LDT;}
+  buildMS();
   apply();
 }
 function setGran(g,btn){S.gran=g;apply();}
@@ -977,7 +996,7 @@ function renderOverview(rows){
   renderHM(rows);
   var hmSel=document.getElementById('hm-metric');if(hmSel)hmSel.value=HMM;
   // root cause
-  const rcDims=[['sample_farm','farm','Top Farms','ti-building'],['variety','variety','Top Varieties','ti-plant-2'],['client','client','Top Clients','ti-users'],['packhouse','packhouse','Top Packhouses','ti-home-cog']];
+  const rcDims=[['sample_farm','farm','Top Farms','ti-building'],['variety','variety','Top Varieties','ti-plant-2'],['sub_client','sub_client','Top Sub Clients','ti-users'],['packhouse','packhouse','Top Packhouses','ti-home-cog']];
   let rcHtml=rcDims.map(d=>{
     const g=groupBy(rows,r=>norm(r[d[0]]));
     const top=Object.keys(g).map(k=>({k,v:cavg(g[k],r=>num(r.major_total)),n:g[k].length})).sort((a,b)=>b.v-a.v).slice(0,5);
@@ -1479,7 +1498,7 @@ let LDF='',LDT='';
     recalcDates();
     S.from=LDF;S.to=LDT;
     const ff=document.getElementById('f-from'),ft=document.getElementById('f-to');
-    ff.min=LDF;ff.max=LDT;ff.value=LDF;ft.min=LDF;ft.max=LDT;ft.value=LDT;
+    ff.min=LDF;ff.value=LDF;ft.value=LDT;
     buildMS();
     const reps=new Set(ROWS.map(r=>r.report_id)).size;
     const maxCreated=ROWS.map(r=>r.created_date).filter(Boolean).sort().pop()||'';

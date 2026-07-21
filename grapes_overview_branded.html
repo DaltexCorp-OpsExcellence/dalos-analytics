@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <script src="https://unpkg.com/@supabase/supabase-js@2"></script>
+<script>window.__DALOS_ACCESS_CHECK={fn:'has_dashboard_access',args:{p_product:'grapes',p_dashboard:'shipments'}};</script>
 <script src="gate.js"></script>
 
 <meta charset="UTF-8">
@@ -691,7 +692,7 @@ async function loadLiveData() {
   const SID_PRIOR = 'e0c08a97-e097-4f46-8819-dc2d9ee26dba';
 
   async function sbFetch(sid) {
-    const r = await fetch(`${SB_URL}/rest/v1/grapes_shipments_view?season_id=eq.${sid}&select=*`,
+    const r = await fetch(`${SB_URL}/rest/v1/grapes_shipments_view?season_id=eq.${sid}&product_id=eq.grapes&select=*`,
       {headers:{'apikey':SB_KEY,'Authorization':`Bearer ${SB_KEY}`,'Range':'0-9999'}});
     if (!r.ok) throw new Error('SB '+r.status);
     return r.json();
@@ -1145,7 +1146,7 @@ function renderWeeklyChart(data, s) {
     svg += `<text x="${x+bW/2}" y="${H+14}" font-size="9" fill="var(--text3)" text-anchor="middle">Wk ${w}</text>`;
   });
 
-  document.getElementById('weekly-chart').innerHTML = `<svg width="100%" viewBox="0 0 ${totalW} ${H+20}" preserveAspectRatio="xMidYMid meet" style="overflow:visible">${svg}</svg>`;
+  document.getElementById('weekly-chart').innerHTML = `<svg width="${totalW}" height="${H+20}" viewBox="0 0 ${totalW} ${H+20}" preserveAspectRatio="xMinYMid meet" style="overflow:visible;max-width:100%">${svg}</svg>`;
 
   const fmt = d => new Date(d).toLocaleDateString('en-GB',{day:'numeric',month:'short'});
   document.getElementById('chart-period').textContent = `${fmt(F.from)} – ${fmt(F.to)} · Loading date · vs 2024/25 (grey)`;
